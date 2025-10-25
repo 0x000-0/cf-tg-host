@@ -5,7 +5,8 @@ export async function onRequest(context) {
   let fileUrl = "https://telegra.ph/" + url.pathname + url.search;
   // 提取 Telegram file_id（不带扩展名）
   const fileId = url.pathname.split(".")[0].split("/")[2];
-  // 防盗链（严格）：必须携带本站或白名单 Referer；否则 403，并禁止缓存
+  
+  // --- 防盗链修改开始 ---
   const referer = request.headers.get("Referer");
   const allowed = new Set([
     url.origin,
@@ -14,8 +15,14 @@ export async function onRequest(context) {
       .map((s) => s.trim())
       .filter(Boolean)
   ]);
+
   let allowedReferer = false;
-  if (referer) {
+  
+  if (!referer) {
+    // 关键：如果 Referer 为空（例如 App、curl 或浏览器直接打开），则放行
+    allowedReferer = true; 
+  } else {
+    // 否则，如果 Referer 存在，才执行白名单检查
     try {
       const r = new URL(referer);
       // 本地开发域名直接放行
@@ -26,7 +33,9 @@ export async function onRequest(context) {
       }
     } catch {}
   }
+
   if (!allowedReferer) {
+    // 只有当 Referer 存在 *且* 不在白名单时，才会被拦截
     return new Response("Hotlink forbidden", {
       status: 403,
       headers: {
@@ -35,6 +44,8 @@ export async function onRequest(context) {
       }
     });
   }
+  // --- 防盗链修改结束 ---
+
   if (fileId) {
     const filePath = await getFilePath(env, fileId);
     fileUrl = `https://api.telegram.org/file/bot${env.TG_Bot_Token}/${filePath}`;
